@@ -45,6 +45,7 @@ def recalculate_timesheet_billing(project_id: str, valid_from_date: str, start: 
         for timesheet in timsheets:
             timesheet_doc = frappe.get_doc("Timesheet", timesheet.name)
             timesheet_doc.flags.ignore_validate_update_after_submit = True
+            timesheet_doc.flags.ignore_billing_rate_value_if_not_exits_pms = True
             timesheet_doc.validate()
             timesheet_doc.save(ignore_permissions=True)
 

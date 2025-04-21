@@ -97,8 +97,15 @@ class TimesheetOverwrite(Timesheet):
                 if billing_rate:
                     data.billing_rate = billing_rate
                     data.billing_amount = data.billing_rate * hours
+                elif frappe.flags.ignore_billing_rate_value_if_not_exits_pms:
+                    data.billing_rate = 0
+                    data.billing_amount = data.billing_rate * hours
+
                 if base_billing_rate:
                     data.base_billing_rate = base_billing_rate
+                    data.base_billing_amount = data.base_billing_rate * hours
+                elif frappe.flags.ignore_billing_rate_value_if_not_exits_pms:
+                    data.base_billing_rate = 0
                     data.base_billing_amount = data.base_billing_rate * hours
 
     def get_activity_costing_rate(self, currency=None):
@@ -144,6 +151,8 @@ class TimesheetOverwrite(Timesheet):
             )
 
             if not custom_default_hourly_billing_rate:
+                if frappe.flags.ignore_billing_rate_value_if_not_exits_pms:
+                    return 0
                 return "Take Costing Rate"
 
             employee_project_billing_hourly_billing_rate = custom_default_hourly_billing_rate
@@ -177,6 +186,8 @@ class TimesheetOverwrite(Timesheet):
             )
 
             if not custom_default_hourly_billing_rate:
+                if frappe.flags.ignore_billing_rate_value_if_not_exits_pms:
+                    return 0
                 return "Take Costing Rate"
             else:
                 employee_project_billing_hourly_billing_rate = custom_default_hourly_billing_rate
@@ -202,6 +213,9 @@ def get_employee_billing_rate(
     currency = project_currency
 
     if not billing_rate:
+        if frappe.flags.ignore_billing_rate_value_if_not_exits_pms:
+            return billing_rate
+
         return frappe.throw(
             frappe._("Project billing rates are not set. Please contact the Project Manager for assistance.")
         )
