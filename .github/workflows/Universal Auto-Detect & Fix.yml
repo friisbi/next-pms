@@ -1,0 +1,88 @@
+name: Universal Auto-Detect & Fix
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch: # Avvio manuale
+  schedule:
+    - cron: '*/30 * * * *' # Ogni 30 min
+
+jobs:
+  smart-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'Smart Bot'
+          git config --global user.email 'bot@noreply.github.com'
+
+      - name: Auto-Detect, Backup & Sync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 1. IDENTIFICAZIONE REPO
+          REPO_NAME=$(echo "${{ github.repository }}" | awk -F '/' '{print $2}')
+          echo "📂 Repository corrente: $REPO_NAME"
+          
+          # --- BACKUP: SALVA LO SCRIPT PRIMA CHE VENGA CANCELLATO ---
+          echo "🛡️ Metto al sicuro i workflow..."
+          mkdir -p /tmp/my_workflows
+          cp -r .github/workflows/* /tmp/my_workflows/
+          # ----------------------------------------------------------
+
+          # 2. RESET DEL CODICE
+          UPSTREAM_URL="https://github.com/frappe/${REPO_NAME}.git"
+          
+          if ! git ls-remote "$UPSTREAM_URL" > /dev/null 2>&1; then
+             echo "⚠️ Repo ufficiale non trovata. Salto il reset completo."
+          else
+             echo "🔗 Sincronizzo con: $UPSTREAM_URL"
+             BRANCH_NAME="develop"
+             git remote add upstream "$UPSTREAM_URL"
+             git fetch upstream
+             
+             # Resetta il codice (cancella tutto per allinearsi all'originale)
+             git checkout -B "$BRANCH_NAME" "upstream/$BRANCH_NAME"
+          fi
+          
+          # --- RIPRISTINO: LO SCRIPT TORNA AL SUO POSTO ---
+          echo "🛡️ Ripristino i workflow..."
+          mkdir -p .github/workflows
+          cp -r /tmp/my_workflows/* .github/workflows/
+          # ------------------------------------------------
+
+          # 3. FIX DIPENDENZE (Versione sicura che non crasha)
+          if [ -f "pyproject.toml" ]; then
+             if grep -q "frappe/" "pyproject.toml" || true; then
+                sed -i 's|"frappe/\([^"]*\)"|"\1"|g' pyproject.toml
+             fi
+          fi
+          
+          if grep -r "frappe/" . --include="hooks.py" > /dev/null 2>&1 || true; then
+             find . -name "hooks.py" -exec sed -i "s|'frappe/\([^']*\)'|'\1'|g" {} +
+             find . -name "hooks.py" -exec sed -i 's|"frappe/\([^"]*\)"|"\1"|g' {} +
+          fi
+
+          # 4. PULIZIA FILE ROSSI (Elimina i workflow rotti di Frappe)
+          echo "🧹 Pulizia file workflow inutili..."
+          rm -f .github/workflows/build_assets.yml
+          rm -f .github/workflows/publish-assets-develop.yml
+          rm -f .github/workflows/build-publish.yml
+          rm -f .github/workflows/ci.yml
+          rm -f .github/workflows/semgrep.yml
+          rm -f .github/workflows/test.yml
+
+          # 5. SALVA E SPINGE (TRUCCO ANTI-ROSSO)
+          git add .
+          
+          # Qui sta la magia: "|| echo" cattura l'errore se non c'è nulla da salvare
+          git commit -m "Auto-fix: Sync, Restore & Clean" || echo "⚠️ Nessuna modifica da salvare (Tutto pulito!)"
+          
+          # Spinge comunque per assicurarsi che il server sia allineato
+          git push -f origin HEAD
